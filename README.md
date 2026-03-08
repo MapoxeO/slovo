@@ -82,6 +82,54 @@ python demo.py -p <PATH_TO_CONFIG>
 
 ![demo](images/demo.gif)
 
+### How demo.py works
+
+`demo.py` implements a real-time Russian Sign Language recognition pipeline driven by a webcam feed.
+Below is a step-by-step description of every moving part.
+
+#### 1. Configuration (`config_example.yaml`)
+The YAML config supplies four values read with **OmegaConf**:
+
+| key | meaning |
+|-----|---------|
+| `model_path` | path to an ONNX model file |
+| `frame_interval` | how many raw camera frames to skip between saved frames |
+| `mean` | per-channel pixel mean for normalisation (ImageNet defaults) |
+| `std` | per-channel pixel std for normalisation (ImageNet defaults) |
+
+#### 2. Frame pre-processing (`Runner.add_frame`)
+Every `frame_interval`-th frame captured from the webcam goes through:
+1. **BGR → RGB** colour conversion.
+2. **Letterbox resize** to 224 × 224 – the image is scaled while keeping the aspect ratio and the
+   remaining area is padded with grey (114, 114, 114).
+3. **Normalisation** – pixel values are shifted and divided by the channel statistics from the config.
+4. **Transpose** from HWC to CHW layout and appended to an in-memory `tensors_list`.
+
+#### 3. Recognition models
+Two execution modes are available, both exposing the same `start()` / `run()` interface:
+
+| class | runs in | when to use |
+|-------|---------|-------------|
+| `Recognition` | same process | default; simpler, lower latency overhead |
+| `RecognitionMP` | separate `multiprocessing.Process` | `--mp` flag; keeps the main loop smooth on slow machines |
+
+When `tensors_list` accumulates enough frames (equal to the model's temporal window size, e.g. 32
+for `mvit32-2.onnx`), the shared `run()` logic in the base class (`BaseRecognition`):
+1. Stacks the frames into a `(1, 1, C, T, H, W)` tensor.
+2. Runs the ONNX session with **onnxruntime**.
+3. Takes `argmax` of the output logits and looks up the predicted gloss in `constants.classes`.
+4. Appends the gloss to `prediction_list` (duplicate and `"---"` results are filtered out).
+5. Clears the processed frames from `tensors_list`.
+
+#### 4. Display loop (`Runner.run`)
+```
+webcam → add_frame() → tensors_list → recognizer.start() → prediction_list
+                                                                   ↓
+                       overlay text on frame ← join last N glosses
+```
+- A thin black bar is concatenated below the live frame to show the last `--length` predicted glosses.
+- Press **Q** or **Esc** to quit.
+
 ## Authors and Credits
 - [Kapitanov Alexander](https://www.linkedin.com/in/hukenovs)
 - [Kvanchiani Karina](https://www.linkedin.com/in/kvanchiani)
@@ -99,6 +147,9 @@ You can cite the paper using the following BibTeX entry:
         year={2023},
         organization={Springer}
     }
+
+## Roadmap
+See [ROADMAP.md](ROADMAP.md) for the planned improvements and future directions of the project.
 
 ## Links
 - [arXiv](https://arxiv.org/abs/2305.14527)
