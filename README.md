@@ -119,7 +119,9 @@ for `mvit32-2.onnx`), the shared `run()` logic in the base class (`BaseRecogniti
 2. Runs the ONNX session with **onnxruntime**.
 3. Takes `argmax` of the output logits and looks up the predicted gloss in `constants.classes`.
 4. Appends the gloss to `prediction_list` (duplicate and `"---"` results are filtered out).
-5. Clears the processed frames from `tensors_list`.
+5. **Sliding-window eviction** – only the single oldest frame is popped from `tensors_list`.
+   The remaining `window_size − 1` frames are kept, so the next prediction is triggered as
+   soon as just one new pre-processed frame arrives, giving smooth continuous recognition.
 
 #### 4. Display loop (`Runner.run`)
 ```

@@ -33,10 +33,15 @@ class BaseRecognition:
 
     def clear_tensors(self):
         """
-        Clear the list of tensors.
+        Remove the oldest frame from the tensor buffer.
+
+        Implements a sliding-window strategy: only the single oldest frame is
+        evicted after each inference pass so that the window advances by one
+        frame at a time.  The remaining frames stay in the buffer and are
+        immediately available for the next prediction as soon as one new
+        pre-processed frame arrives.
         """
-        for _ in range(self.window_size):
-            self.tensors_list.pop(0)
+        self.tensors_list.pop(0)
 
     def run(self):
         """
